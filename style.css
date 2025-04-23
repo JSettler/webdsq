@@ -1,0 +1,136 @@
+/* style.css */
+
+/* --- Base Styles (Day Mode) --- */
+body {
+    font-family: sans-serif;
+    background-color: #f4f4f4;
+    color: #333;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+table {
+    border-collapse: collapse;
+    margin: 20px auto;
+    border: 3px solid #333;
+}
+
+td { /* Base style for all cells */
+    width: 50px;
+    height: 50px;
+    border: 1px solid #555; /* Grid lines */
+    text-align: center;
+    vertical-align: middle;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    background-color: #8B4513; /* DEFAULT GROUND COLOR FOR TD */
+}
+
+/* --- Specific Terrain Colors (Day Mode) --- */
+td.terrain-water { background-color: #4682B4; } /* SteelBlue */
+td.terrain-trap { background-color: #DC143C; } /* Crimson */
+td.terrain-den { background-color: #000000; color: white; } /* Black den */
+td.terrain-ground { background-color: #8B4513; } /* Explicit ground */
+
+/* --- Piece Colors (Day Mode) --- */
+.piece-red { color: red; }
+.piece-black { color: black; }
+
+/* Ensure den text color overrides piece color */
+td.terrain-den .piece-red, /* If piece is child element */
+td.terrain-den .piece-black {
+    color: white;
+}
+/* Den text color if piece IS the TD (applied via class) */
+td.terrain-den.piece-red,
+td.terrain-den.piece-black {
+    color: white;
+}
+
+
+/* --- Dark Mode Styles --- */
+body.dark-mode {
+    background-color: #333;
+    color: #f4f4f4;
+}
+
+body.dark-mode table {
+     border: 3px solid #ccc;
+}
+
+body.dark-mode td { /* Base TD in dark mode */
+    border-color: #aaa;
+    background-color: #5a2d0c; /* Darker brown DEFAULT */
+}
+
+/* Specific dark mode terrain colors */
+body.dark-mode td.terrain-water { background-color: #00008B; } /* Dark blue */
+body.dark-mode td.terrain-trap { background-color: #8B0000; } /* Dark red */
+body.dark-mode td.terrain-den { background-color: #1a1a1a; color: white; } /* Very dark grey den */
+body.dark-mode td.terrain-ground { background-color: #5a2d0c; } /* Explicit dark ground */
+
+/* Dark mode piece colors */
+body.dark-mode .piece-red { color: #FF6347; } /* Tomato Red */
+body.dark-mode .piece-black { color: #bbb; } /* Lighter Grey for dark mode black */
+
+/* Adjust den text color in dark mode */
+body.dark-mode td.terrain-den .piece-red,
+body.dark-mode td.terrain-den .piece-black {
+     color: white;
+}
+body.dark-mode td.terrain-den.piece-red,
+body.dark-mode td.terrain-den.piece-black {
+     color: white;
+}
+
+
+/* --- Other Styles --- */
+.controls {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+label {
+    margin-right: 5px;
+}
+
+select, button, input {
+    margin: 5px 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+fieldset {
+    display: inline-block;
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin: 0 10px;
+}
+
+#gameStatus {
+     text-align: center;
+     margin-top: 20px;
+     font-weight: bold;
+     min-height: 1.2em; /* Prevent layout shift */
+}
+
+/* Highlight for selected piece */
+.selected {
+    outline: 3px solid yellow;
+    outline-offset: -3px;
+}
+
+/* Dark mode controls */
+body.dark-mode fieldset {
+    border-color: #888;
+}
+body.dark-mode button,
+body.dark-mode select {
+    background-color: #555;
+    color: #f4f4f4;
+    border: 1px solid #888;
+}
+body.dark-mode input[type="radio"]:checked + label {
+    font-weight: bold; /* Example highlight */
+}
