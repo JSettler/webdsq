@@ -1,4 +1,4 @@
-// game.js - Refactored for Clarity and Random AI
+// game.js - Refactored for Clarity and Random AI (with Mirrored Board Setup)
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -94,19 +94,29 @@ document.addEventListener('DOMContentLoaded', () => {
         terrainMap[0][3] = TERRAIN.RED_DEN; terrainMap[8][3] = TERRAIN.BLACK_DEN;
     }
 
-    /** Sets up the pieces on the board to their starting positions. */
+    /** Sets up the pieces on the board to their starting positions (HORIZONTALLY MIRRORED). */
     function setupInitialBoard() {
         board = Array(BOARD_ROWS).fill(null).map(() => Array(BOARD_COLS).fill(null));
-        // Red pieces (bottom)
-        board[0][0] = { piece: 'L', color: PLAYER_RED }; board[0][6] = { piece: 'T', color: PLAYER_RED };
-        board[1][1] = { piece: 'D', color: PLAYER_RED }; board[1][5] = { piece: 'C', color: PLAYER_RED };
-        board[2][0] = { piece: 'R', color: PLAYER_RED }; board[2][2] = { piece: 'P', color: PLAYER_RED };
-        board[2][4] = { piece: 'W', color: PLAYER_RED }; board[2][6] = { piece: 'E', color: PLAYER_RED };
-        // Black pieces (top)
-        board[8][6] = { piece: 'L', color: PLAYER_BLACK }; board[8][0] = { piece: 'T', color: PLAYER_BLACK };
-        board[7][5] = { piece: 'D', color: PLAYER_BLACK }; board[7][1] = { piece: 'C', color: PLAYER_BLACK };
-        board[6][6] = { piece: 'R', color: PLAYER_BLACK }; board[6][4] = { piece: 'P', color: PLAYER_BLACK };
-        board[6][2] = { piece: 'W', color: PLAYER_BLACK }; board[6][0] = { piece: 'E', color: PLAYER_BLACK };
+
+        // Place Red pieces (bottom) - MIRRORED
+        board[0][6] = { piece: 'L', color: PLAYER_RED }; // Swapped L and T
+        board[0][0] = { piece: 'T', color: PLAYER_RED };
+        board[1][5] = { piece: 'D', color: PLAYER_RED }; // Swapped D and C
+        board[1][1] = { piece: 'C', color: PLAYER_RED };
+        board[2][6] = { piece: 'R', color: PLAYER_RED }; // Swapped R and E
+        board[2][4] = { piece: 'P', color: PLAYER_RED }; // Swapped P and W
+        board[2][2] = { piece: 'W', color: PLAYER_RED };
+        board[2][0] = { piece: 'E', color: PLAYER_RED };
+
+        // Place Black pieces (top) - MIRRORED
+        board[8][0] = { piece: 'L', color: PLAYER_BLACK }; // Swapped L and T
+        board[8][6] = { piece: 'T', color: PLAYER_BLACK };
+        board[7][1] = { piece: 'D', color: PLAYER_BLACK }; // Swapped D and C
+        board[7][5] = { piece: 'C', color: PLAYER_BLACK };
+        board[6][0] = { piece: 'R', color: PLAYER_BLACK }; // Swapped R and E
+        board[6][2] = { piece: 'P', color: PLAYER_BLACK }; // Swapped P and W
+        board[6][4] = { piece: 'W', color: PLAYER_BLACK };
+        board[6][6] = { piece: 'E', color: PLAYER_BLACK };
     }
 
     /** Sets up the initial UI state before the game starts. */
@@ -228,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
     /** Checks if a move from (startRow, startCol) to (endRow, endCol) is legal. */
     function isValidMove(startRow, startCol, endRow, endCol) {
         // Basic bounds check
-        if (endRow < 0 || endRow >= BOARD_ROWS || endCol < 0 || endCol >= BOARD_COLS) return false;
+        if (endRow < 0 || endRow >= BOARD_ROWS || endCol < 0 || endCol >= BOARD_COLS) return false; // Corrected bounds check
 
         const pieceInfo = board[startRow]?.[startCol];
         if (!pieceInfo) return false; // No piece at start
@@ -360,18 +370,17 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let c = 0; c < BOARD_COLS; c++) {
                 if (board[r]?.[c]?.color === opponentColor) {
                     opponentPiecesLeft++;
-                    break; // Found one, no need to check further in this row
+                    // Optimization: Can stop checking as soon as one opponent piece is found
+                    return false; // Game hasn't ended by capture yet
                 }
             }
-             if (opponentPiecesLeft > 0) break; // Found one, no need to check further rows
         }
+        // If loop completes without finding any opponent pieces
         if (opponentPiecesLeft === 0) {
             return true; // All opponent pieces captured
         }
 
-        // 3. No Legal Moves (Stalemate/Loss for current player) - Checked before AI move
-        // This function only checks wins caused *by* the current move.
-
+        // Should not reach here if opponent pieces existed
         return false;
     }
 
@@ -384,9 +393,10 @@ document.addEventListener('DOMContentLoaded', () => {
          let message = "";
          if (reason === "win") {
              message = `${winnerColor.toUpperCase()} wins!`;
-             // More specific win reasons checked in makeMove/checkWinCondition
          } else if (reason === "no_moves") {
-             message = `${winnerColor === PLAYER_RED ? PLAYER_BLACK : PLAYER_RED} has no legal moves! ${winnerColor.toUpperCase()} wins!`;
+             // The player whose turn it WAS couldn't move, so the OTHER player wins
+             const loserColor = (winnerColor === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
+             message = `${loserColor.toUpperCase()} has no legal moves! ${winnerColor.toUpperCase()} wins!`;
          } else {
              message = "Game Over!";
          }
@@ -407,16 +417,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`;
 
-        // Use console.time for basic performance measurement
         console.time("AI Move Calculation");
-
         const legalMoves = generateLegalMoves(aiSide);
-
-        console.timeEnd("AI Move Calculation"); // See how long generation takes
+        console.timeEnd("AI Move Calculation");
 
         if (legalMoves.length === 0) {
-            // AI has no moves, the other player wins
-            endGame((aiSide === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED, "no_moves");
+            // AI has no moves, the other player (human) wins
+            endGame(playerSide, "no_moves");
             return;
         }
 
@@ -424,7 +431,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const randomIndex = Math.floor(Math.random() * legalMoves.length);
         const move = legalMoves[randomIndex];
 
-        // Log AI move (optional)
         const movingPiece = board[move.from.row]?.[move.from.col];
         console.log(`AI (${aiSide}) moving ${movingPiece?.piece} from (${move.from.row},${move.from.col}) to (${move.to.row},${move.to.col})`);
 
@@ -459,10 +465,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (isValidMove(startRow, startCol, row, col)) { // Valid move target
                 const moveFrom = { row: startRow, col: startCol };
                 const moveTo = { row: row, col: col };
-                // Deselection and state update happens within makeMove
                 makeMove(moveFrom, moveTo);
-                 // Return early as makeMove handles render/status/AI trigger
-                 return;
+                 return; // makeMove handles render/status/AI trigger
             } else { // Invalid move target
                 console.log("Invalid move target.");
                 selectedCell = null; // Deselect on invalid click
@@ -482,7 +486,6 @@ document.addEventListener('DOMContentLoaded', () => {
     /** Handles changes to the player side selection radio buttons. */
     function handleSideChange() {
         if (gameRunning) return; // Don't allow side change mid-game
-        // Actual state setting happens in handleStartGame
         console.log("Side selection changed (will apply on Start).");
     }
 
@@ -503,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Player: ${playerSide}, AI: ${aiSide}. Red moves first.`);
 
         // 2. Setup board and initial state
-        setupInitialBoard();
+        setupInitialBoard(); // Uses the mirrored setup
         currentPlayer = PLAYER_RED; // Red always starts
         isPlayerTurn = (currentPlayer === playerSide);
         selectedCell = null;
@@ -546,7 +549,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusElement.innerText = `${playerSide.toUpperCase()}'s turn. Select a piece.`;
             }
         } else {
-             // Status set at the start of makeAiMove
              statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`;
         }
     }
@@ -559,4 +561,3 @@ document.addEventListener('DOMContentLoaded', () => {
     initialUISetup(); // Sets up UI elements and pre-game listeners
 
 }); // End DOMContentLoaded
-
