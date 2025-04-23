@@ -1,4 +1,4 @@
-// game.js - Refactored for Clarity and Random AI (with Mirrored Board Setup)
+// game.js - Refactored + Last Move Highlight + 1-Ply AI
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -35,8 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
         BLACK_DEN: 5    // Black player's goal (row 8, col 3)
     };
 
-    // AI configuration (currently just delay)
-    const AI_MOVE_DELAY_MS = 100; // Shorter delay for random moves
+    // AI configuration
+    const AI_MOVE_DELAY_MS = 150; // Slightly longer delay to perceive AI move
+    const WIN_SCORE = 10000; // Score for winning (den capture)
+    const LOSS_SCORE = -10000; // Score for losing
 
     // ==========================================================================
     // Game State Variables
@@ -50,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedCell = null; // Stores { row, col } of the piece the player selected
     let gameRunning = false; // Flag indicating if the game is active
     let isPlayerTurn = false; // Flag indicating if it's the human's turn to move
+    let lastAiMove = null; // Stores { from: {row, col}, to: {row, col} } of AI's last move
 
     // ==========================================================================
     // UI Element References
@@ -97,33 +100,18 @@ document.addEventListener('DOMContentLoaded', () => {
     /** Sets up the pieces on the board to their standard starting positions. */
     function setupInitialBoard() {
         board = Array(BOARD_ROWS).fill(null).map(() => Array(BOARD_COLS).fill(null));
-
-        // --- Red pieces (Bottom, Row 0-2) ---
-        // Row 0 (Bottom row)
-        board[0][0] = { piece: 'T', color: PLAYER_RED }; // Tiger Left
-        board[0][6] = { piece: 'L', color: PLAYER_RED }; // Lion Right
-        // Row 1
-        board[1][1] = { piece: 'C', color: PLAYER_RED }; // Cat Left
-        board[1][5] = { piece: 'D', color: PLAYER_RED }; // Dog Right
-        // Row 2
-        board[2][0] = { piece: 'E', color: PLAYER_RED }; // Elephant Left
-        board[2][2] = { piece: 'W', color: PLAYER_RED }; // Wolf Left-Center
-        board[2][4] = { piece: 'P', color: PLAYER_RED }; // Leopard Right-Center
-        board[2][6] = { piece: 'R', color: PLAYER_RED }; // Rat Right
-
-        // --- Black pieces (Top, Row 6-8) ---
-        // Row 8 (Top row)
-        board[8][0] = { piece: 'L', color: PLAYER_BLACK }; // Lion Left
-        board[8][6] = { piece: 'T', color: PLAYER_BLACK }; // Tiger Right
-        // Row 7
-        board[7][1] = { piece: 'D', color: PLAYER_BLACK }; // Dog Left
-        board[7][5] = { piece: 'C', color: PLAYER_BLACK }; // Cat Right
-        // Row 6
-        board[6][0] = { piece: 'R', color: PLAYER_BLACK }; // Rat Left
-        board[6][2] = { piece: 'P', color: PLAYER_BLACK }; // Leopard Left-Center
-        board[6][4] = { piece: 'W', color: PLAYER_BLACK }; // Wolf Right-Center
-        board[6][6] = { piece: 'E', color: PLAYER_BLACK }; // Elephant Right
+        // Red pieces (Bottom) - Standard Setup
+        board[0][0] = { piece: 'T', color: PLAYER_RED }; board[0][6] = { piece: 'L', color: PLAYER_RED };
+        board[1][1] = { piece: 'C', color: PLAYER_RED }; board[1][5] = { piece: 'D', color: PLAYER_RED };
+        board[2][0] = { piece: 'E', color: PLAYER_RED }; board[2][2] = { piece: 'W', color: PLAYER_RED };
+        board[2][4] = { piece: 'P', color: PLAYER_RED }; board[2][6] = { piece: 'R', color: PLAYER_RED };
+        // Black pieces (Top) - Standard Setup
+        board[8][0] = { piece: 'L', color: PLAYER_BLACK }; board[8][6] = { piece: 'T', color: PLAYER_BLACK };
+        board[7][1] = { piece: 'D', color: PLAYER_BLACK }; board[7][5] = { piece: 'C', color: PLAYER_BLACK };
+        board[6][0] = { piece: 'R', color: PLAYER_BLACK }; board[6][2] = { piece: 'P', color: PLAYER_BLACK };
+        board[6][4] = { piece: 'W', color: PLAYER_BLACK }; board[6][6] = { piece: 'E', color: PLAYER_BLACK };
     }
+
 
     /** Sets up the initial UI state before the game starts. */
     function initialUISetup() {
@@ -166,7 +154,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 cellElement.innerText = '';
                 cellElement.classList.remove(
                     'terrain-ground', 'terrain-water', 'terrain-trap', 'terrain-den',
-                    'piece-red', 'piece-black', 'selected'
+                    'piece-red', 'piece-black', 'selected',
+                    'last-move-from', 'last-move-to' // Clear last move highlights
                 );
 
                 // 2. Add terrain class
@@ -186,6 +175,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 4. Highlight selected cell
                 if (selectedCell && selectedCell.row === r && selectedCell.col === c) {
                     cellElement.classList.add('selected');
+                }
+
+                // 5. Highlight last AI move
+                if (lastAiMove) {
+                    if (lastAiMove.from.row === r && lastAiMove.from.col === c) {
+                        cellElement.classList.add('last-move-from');
+                    }
+                    if (lastAiMove.to.row === r && lastAiMove.to.col === c) {
+                        cellElement.classList.add('last-move-to');
+                    }
                 }
             }
         }
@@ -244,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     /** Checks if a move from (startRow, startCol) to (endRow, endCol) is legal. */
     function isValidMove(startRow, startCol, endRow, endCol) {
         // Basic bounds check
-        if (endRow < 0 || endRow >= BOARD_ROWS || endCol < 0 || endCol >= BOARD_COLS) return false; // Corrected bounds check
+        if (endRow < 0 || endRow >= BOARD_ROWS || endCol < 0 || endCol >= BOARD_COLS) return false;
 
         const pieceInfo = board[startRow]?.[startCol];
         if (!pieceInfo) return false; // No piece at start
@@ -334,6 +333,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // If this move is being made by the player, clear the last AI move highlight
+        if (isPlayerTurn) {
+            lastAiMove = null;
+        }
+
         // Perform the move
         board[to.row][to.col] = piece;
         board[from.row][from.col] = null;
@@ -349,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPlayer = (currentPlayer === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
         isPlayerTurn = (currentPlayer === playerSide);
 
-        // Update UI
+        // Update UI (renderBoard will handle clearing/showing last AI move)
         renderBoard();
         updateStatus();
 
@@ -371,23 +375,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 2. Capture All Pieces Win
         const opponentColor = (moverColor === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
-        let opponentPiecesLeft = 0;
         for (let r = 0; r < BOARD_ROWS; r++) {
             for (let c = 0; c < BOARD_COLS; c++) {
                 if (board[r]?.[c]?.color === opponentColor) {
-                    opponentPiecesLeft++;
-                    // Optimization: Can stop checking as soon as one opponent piece is found
-                    return false; // Game hasn't ended by capture yet
+                    return false; // Found opponent piece, game not over by capture
                 }
             }
         }
         // If loop completes without finding any opponent pieces
-        if (opponentPiecesLeft === 0) {
-            return true; // All opponent pieces captured
-        }
-
-        // Should not reach here if opponent pieces existed
-        return false;
+        return true; // All opponent pieces captured
     }
 
      /** Ends the game and displays the winner. */
@@ -409,40 +405,134 @@ document.addEventListener('DOMContentLoaded', () => {
 
          statusElement.innerText = message;
          console.log("Game ended:", message);
-         renderBoard(); // Final render
+         renderBoard(); // Final render (will include last move highlight if AI won)
      }
 
 
     // ==========================================================================
-    // AI Logic (Random Mover)
+    // AI Logic (1-Ply Minimax with Simple Evaluation)
     // ==========================================================================
 
-    /** Makes the AI choose and execute a random legal move. */
+    /**
+     * Evaluates the current board state from the perspective of the AI player.
+     * Higher score is better for the AI.
+     * Considers only den capture and material balance.
+     * @returns {number} The evaluation score.
+     */
+    function evaluateBoard() {
+        let aiMaterial = 0;
+        let playerMaterial = 0;
+        let aiWon = false;
+        let playerWon = false;
+
+        for (let r = 0; r < BOARD_ROWS; r++) {
+            for (let c = 0; c < BOARD_COLS; c++) {
+                const pieceInfo = board[r]?.[c];
+                if (pieceInfo) {
+                    // Simple rank = material value. Could be more nuanced later.
+                    const rank = PIECES[pieceInfo.piece]?.rank || 0;
+                    const terrain = getTerrain(r, c);
+
+                    if (pieceInfo.color === aiSide) {
+                        aiMaterial += rank;
+                        // Check if AI reached player's den
+                        const playerDen = (playerSide === PLAYER_RED) ? TERRAIN.RED_DEN : TERRAIN.BLACK_DEN;
+                        if (terrain === playerDen) {
+                             // AI should not be able to enter player's den, but check anyway
+                             // This check is more accurately done in checkWinCondition after a move
+                        }
+                    } else { // Piece belongs to player
+                        playerMaterial += rank;
+                        // Check if Player reached AI's den
+                        const aiDen = (aiSide === PLAYER_RED) ? TERRAIN.RED_DEN : TERRAIN.BLACK_DEN;
+                        if (terrain === aiDen) {
+                            playerWon = true; // Player reaching AI den is immediate loss for AI
+                        }
+                    }
+                }
+                 // Check den entry independent of pieces (in case board state is already a win)
+                 const playerDen = (playerSide === PLAYER_RED) ? TERRAIN.RED_DEN : TERRAIN.BLACK_DEN;
+                 const aiDen = (aiSide === PLAYER_RED) ? TERRAIN.RED_DEN : TERRAIN.BLACK_DEN;
+                 if (getTerrain(r, c) === aiDen && board[r]?.[c]?.color === playerSide) playerWon = true;
+                 if (getTerrain(r, c) === playerDen && board[r]?.[c]?.color === aiSide) aiWon = true;
+            }
+        }
+
+        if (aiWon) return WIN_SCORE; // AI wins takes precedence
+        if (playerWon) return LOSS_SCORE; // Player wins is worst outcome
+
+        // If no den capture, return material difference
+        return aiMaterial - playerMaterial;
+    }
+
+
+    /** Makes the AI choose and execute the best move based on 1-ply evaluation. */
     function makeAiMove() {
         if (!gameRunning || isPlayerTurn) return;
 
         statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`;
+        console.time("AI Move Calculation (1-Ply)");
 
-        console.time("AI Move Calculation");
         const legalMoves = generateLegalMoves(aiSide);
-        console.timeEnd("AI Move Calculation");
 
         if (legalMoves.length === 0) {
-            // AI has no moves, the other player (human) wins
-            endGame(playerSide, "no_moves");
+            console.timeEnd("AI Move Calculation (1-Ply)");
+            endGame(playerSide, "no_moves"); // Player wins if AI has no moves
             return;
         }
 
-        // Select a random move
-        const randomIndex = Math.floor(Math.random() * legalMoves.length);
-        const move = legalMoves[randomIndex];
+        let bestScore = LOSS_SCORE - 1; // Initialize lower than worst possible score
+        let bestMove = null;
+        let possibleBestMoves = []; // Store all moves with the best score
 
-        const movingPiece = board[move.from.row]?.[move.from.col];
-        console.log(`AI (${aiSide}) moving ${movingPiece?.piece} from (${move.from.row},${move.from.col}) to (${move.to.row},${move.to.col})`);
+        for (const move of legalMoves) {
+            // --- Simulate the move ---
+            const pieceFrom = board[move.from.row][move.from.col];
+            const pieceTo = board[move.to.row][move.to.col]; // Store potential captured piece
 
-        // Execute the move
-        makeMove(move.from, move.to);
+            board[move.to.row][move.to.col] = pieceFrom;
+            board[move.from.row][move.from.col] = null;
+
+            // --- Evaluate the board AFTER the simulated move ---
+            // We evaluate from the AI's perspective. A higher score is better.
+            const score = evaluateBoard();
+
+            // --- Undo the move ---
+            board[move.from.row][move.from.col] = pieceFrom;
+            board[move.to.row][move.to.col] = pieceTo;
+
+            // --- Update best move tracking ---
+            if (score > bestScore) {
+                bestScore = score;
+                possibleBestMoves = [move]; // Start a new list of best moves
+            } else if (score === bestScore) {
+                possibleBestMoves.push(move); // Add to existing list of equally good moves
+            }
+        }
+
+        console.timeEnd("AI Move Calculation (1-Ply)");
+
+        // Choose the best move (randomly from equally good moves)
+        if (possibleBestMoves.length > 0) {
+            const randomIndex = Math.floor(Math.random() * possibleBestMoves.length);
+            bestMove = possibleBestMoves[randomIndex];
+        } else {
+             // Fallback if something went wrong (shouldn't happen if legalMoves > 0)
+             console.error("AI Error: No best move found despite legal moves existing?");
+             bestMove = legalMoves[0]; // Pick first legal move as failsafe
+        }
+
+
+        // Store the chosen move for highlighting
+        lastAiMove = { from: bestMove.from, to: bestMove.to };
+
+        const movingPiece = board[bestMove.from.row]?.[bestMove.from.col];
+        console.log(`AI (${aiSide}) chose move ${movingPiece?.piece} from (${bestMove.from.row},${bestMove.from.col}) to (${bestMove.to.row},${bestMove.to.col}) with score ${bestScore}`);
+
+        // Execute the best move
+        makeMove(bestMove.from, bestMove.to);
     }
+
 
     // ==========================================================================
     // UI Interaction & Event Handlers
@@ -471,8 +561,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (isValidMove(startRow, startCol, row, col)) { // Valid move target
                 const moveFrom = { row: startRow, col: startCol };
                 const moveTo = { row: row, col: col };
+                // Deselection and state update happens within makeMove
                 makeMove(moveFrom, moveTo);
-                 return; // makeMove handles render/status/AI trigger
+                 // Return early as makeMove handles render/status/AI trigger
+                 return;
             } else { // Invalid move target
                 console.log("Invalid move target.");
                 selectedCell = null; // Deselect on invalid click
@@ -512,11 +604,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Player: ${playerSide}, AI: ${aiSide}. Red moves first.`);
 
         // 2. Setup board and initial state
-        setupInitialBoard(); // Uses the mirrored setup
+        setupInitialBoard(); // Uses the standard setup
         currentPlayer = PLAYER_RED; // Red always starts
         isPlayerTurn = (currentPlayer === playerSide);
         selectedCell = null;
         gameRunning = true;
+        lastAiMove = null; // Reset last move highlight
 
         // 3. Update UI state
         sideSelectionFieldset.disabled = true;
