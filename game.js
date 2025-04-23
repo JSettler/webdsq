@@ -1,10 +1,15 @@
-// game.js
+// game.js - Refactored for Clarity and Random AI
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Constants ---
+
+    // ==========================================================================
+    // Constants & Configuration
+    // ==========================================================================
+
     const BOARD_ROWS = 9;
     const BOARD_COLS = 7;
 
+    // Piece ranks (higher number is stronger, except for Rat vs Elephant)
     const PIECES = {
         R: { rank: 1, name: 'Rat' },
         C: { rank: 2, name: 'Cat' },
@@ -16,546 +21,98 @@ document.addEventListener('DOMContentLoaded', () => {
         E: { rank: 8, name: 'Elephant' }
     };
 
-    const PLAYER_RED = 'red'; // Logically represents the player starting at row 0
-    const PLAYER_BLACK = 'black'; // Logically represents the player starting at row 8
+    // Player identifiers
+    const PLAYER_RED = 'red';     // Starts at bottom (row 0)
+    const PLAYER_BLACK = 'black';   // Starts at top (row 8)
 
+    // Terrain types
     const TERRAIN = {
         GROUND: 0,
         WATER: 1,
-        RED_TRAP: 2,    // Trap adjacent to Red Den
-        BLACK_TRAP: 3,  // Trap adjacent to Black Den
-        RED_DEN: 4,     // Red player's goal (row 0)
-        BLACK_DEN: 5    // Black player's goal (row 8)
+        RED_TRAP: 2,    // Trap adjacent to Red Den (row 0-1)
+        BLACK_TRAP: 3,  // Trap adjacent to Black Den (row 7-8)
+        RED_DEN: 4,     // Red player's goal (row 0, col 3)
+        BLACK_DEN: 5    // Black player's goal (row 8, col 3)
     };
 
-    // Map cell coordinates to terrain types
-    const terrainMap = Array(BOARD_ROWS).fill(null).map(() => Array(BOARD_COLS).fill(TERRAIN.GROUND));
+    // AI configuration (currently just delay)
+    const AI_MOVE_DELAY_MS = 100; // Shorter delay for random moves
 
-    function initializeTerrainMap() {
-        // Reset to Ground first
-        for (let r = 0; r < BOARD_ROWS; r++) {
-            for (let c = 0; c < BOARD_COLS; c++) {
-                terrainMap[r][c] = TERRAIN.GROUND;
-            }
+    // ==========================================================================
+    // Game State Variables
+    // ==========================================================================
+
+    let board = []; // 2D array [row][col] storing { piece: 'X', color: 'red'/'black' } or null
+    let terrainMap = []; // 2D array [row][col] storing TERRAIN type
+    let playerSide = PLAYER_RED; // Which color the human player controls
+    let aiSide = PLAYER_BLACK;   // Which color the AI controls
+    let currentPlayer = PLAYER_RED; // Whose turn it currently is (Red always starts)
+    let selectedCell = null; // Stores { row, col } of the piece the player selected
+    let gameRunning = false; // Flag indicating if the game is active
+    let isPlayerTurn = false; // Flag indicating if it's the human's turn to move
+
+    // ==========================================================================
+    // UI Element References
+    // ==========================================================================
+
+    let boardElement, statusElement, depthSelector, sideRedRadio, sideBlackRadio,
+        themeToggleButton, startGameButton, sideSelectionFieldset;
+
+    function cacheUIElements() {
+        boardElement = document.getElementById('gameBoard');
+        statusElement = document.getElementById('gameStatus');
+        depthSelector = document.getElementById('searchDepth');
+        sideRedRadio = document.getElementById('sideRed');
+        sideBlackRadio = document.getElementById('sideBlack');
+        themeToggleButton = document.getElementById('toggleTheme');
+        startGameButton = document.getElementById('startGame');
+        sideSelectionFieldset = document.getElementById('sideSelection');
+
+        // Basic check if elements exist
+        if (!boardElement || !statusElement || !depthSelector || !sideRedRadio ||
+            !sideBlackRadio || !themeToggleButton || !startGameButton || !sideSelectionFieldset) {
+            console.error("FATAL: Could not find all required UI elements! Check HTML IDs.");
+            return false;
         }
-
-        // Water
-        for (let r = 3; r <= 5; r++) {
-            terrainMap[r][1] = TERRAIN.WATER;
-            terrainMap[r][2] = TERRAIN.WATER;
-            terrainMap[r][4] = TERRAIN.WATER;
-            terrainMap[r][5] = TERRAIN.WATER;
-        }
-        // Red Traps (Bottom area)
-        terrainMap[0][2] = TERRAIN.RED_TRAP;
-        terrainMap[0][4] = TERRAIN.RED_TRAP;
-        terrainMap[1][3] = TERRAIN.RED_TRAP;
-
-        // Black Traps (Top area)
-        terrainMap[8][2] = TERRAIN.BLACK_TRAP;
-        terrainMap[8][4] = TERRAIN.BLACK_TRAP;
-        terrainMap[7][3] = TERRAIN.BLACK_TRAP;
-
-        // Dens
-        terrainMap[0][3] = TERRAIN.RED_DEN;    // Red Den at bottom
-        terrainMap[8][3] = TERRAIN.BLACK_DEN;   // Black Den at top
+        return true;
     }
-    // Initialize terrain map once on load
-    initializeTerrainMap();
 
-    // --- Game State Variables ---
-    let board = Array(BOARD_ROWS).fill(null).map(() => Array(BOARD_COLS).fill(null)); // Stores { piece: 'R', color: 'red' } or null
-    let playerSide = PLAYER_RED; // Default, will be set on Start
-    let aiSide = PLAYER_BLACK;   // Default, will be set on Start
-    let currentPlayer = PLAYER_RED; // Red always moves first in Jungle Chess rules
-    let selectedCell = null; // { row, col } of the selected piece
-    let gameRunning = false; // Game doesn't start immediately
-    let isPlayerTurn = false; // Will be set based on playerSide and currentPlayer
+    // ==========================================================================
+    // Initialization Functions
+    // ==========================================================================
 
-    // --- UI Elements ---
-    const boardElement = document.getElementById('gameBoard');
-    const statusElement = document.getElementById('gameStatus');
-    const depthSelector = document.getElementById('searchDepth');
-    const sideRedRadio = document.getElementById('sideRed');
-    const sideBlackRadio = document.getElementById('sideBlack');
-    const themeToggleButton = document.getElementById('toggleTheme');
-    const startGameButton = document.getElementById('startGame');
-    const sideSelectionFieldset = document.getElementById('sideSelection');
+    /** Initializes the terrain map based on game rules. */
+    function initializeTerrainMap() {
+        terrainMap = Array(BOARD_ROWS).fill(null).map(() => Array(BOARD_COLS).fill(TERRAIN.GROUND));
+        // Water
+        for (let r = 3; r <= 5; r++) { terrainMap[r][1] = TERRAIN.WATER; terrainMap[r][2] = TERRAIN.WATER; terrainMap[r][4] = TERRAIN.WATER; terrainMap[r][5] = TERRAIN.WATER; }
+        // Red Traps (Bottom)
+        terrainMap[0][2] = TERRAIN.RED_TRAP; terrainMap[0][4] = TERRAIN.RED_TRAP; terrainMap[1][3] = TERRAIN.RED_TRAP;
+        // Black Traps (Top)
+        terrainMap[8][2] = TERRAIN.BLACK_TRAP; terrainMap[8][4] = TERRAIN.BLACK_TRAP; terrainMap[7][3] = TERRAIN.BLACK_TRAP;
+        // Dens
+        terrainMap[0][3] = TERRAIN.RED_DEN; terrainMap[8][3] = TERRAIN.BLACK_DEN;
+    }
 
-    // --- Initialization ---
-
+    /** Sets up the pieces on the board to their starting positions. */
     function setupInitialBoard() {
-        // Always set up Red at bottom (row 0), Black at top (row 8) visually/logically
         board = Array(BOARD_ROWS).fill(null).map(() => Array(BOARD_COLS).fill(null));
-
-        // Place Red pieces (bottom)
+        // Red pieces (bottom)
         board[0][0] = { piece: 'L', color: PLAYER_RED }; board[0][6] = { piece: 'T', color: PLAYER_RED };
         board[1][1] = { piece: 'D', color: PLAYER_RED }; board[1][5] = { piece: 'C', color: PLAYER_RED };
         board[2][0] = { piece: 'R', color: PLAYER_RED }; board[2][2] = { piece: 'P', color: PLAYER_RED };
         board[2][4] = { piece: 'W', color: PLAYER_RED }; board[2][6] = { piece: 'E', color: PLAYER_RED };
-
-        // Place Black pieces (top)
+        // Black pieces (top)
         board[8][6] = { piece: 'L', color: PLAYER_BLACK }; board[8][0] = { piece: 'T', color: PLAYER_BLACK };
         board[7][5] = { piece: 'D', color: PLAYER_BLACK }; board[7][1] = { piece: 'C', color: PLAYER_BLACK };
         board[6][6] = { piece: 'R', color: PLAYER_BLACK }; board[6][4] = { piece: 'P', color: PLAYER_BLACK };
         board[6][2] = { piece: 'W', color: PLAYER_BLACK }; board[6][0] = { piece: 'E', color: PLAYER_BLACK };
     }
 
-    function renderBoard(initialClear = false) {
-        for (let r = 0; r < BOARD_ROWS; r++) {
-            for (let c = 0; c < BOARD_COLS; c++) {
-                const cellElement = document.getElementById(`cell-${r}-${c}`);
-                if (!cellElement) continue; // Safety check
-
-                const cellData = board[r][c];
-                const terrain = terrainMap[r][c]; // Use precomputed map
-
-                // 1. Clear previous dynamic classes and content
-                cellElement.innerText = '';
-                // Remove only the classes we might add/change dynamically
-                cellElement.classList.remove(
-                    'terrain-ground', 'terrain-water', 'terrain-trap', 'terrain-den', // Terrain classes
-                    'piece-red', 'piece-black', // Piece color classes
-                    'selected' // Selection class
-                );
-
-                // 2. Add the correct terrain class based on the map
-                switch (terrain) {
-                    case TERRAIN.WATER:
-                        cellElement.classList.add('terrain-water');
-                        break;
-                    case TERRAIN.RED_TRAP:
-                    case TERRAIN.BLACK_TRAP: // Use the same visual class for traps
-                        cellElement.classList.add('terrain-trap');
-                        break;
-                    case TERRAIN.RED_DEN:
-                    case TERRAIN.BLACK_DEN: // Use the same visual class for dens
-                        cellElement.classList.add('terrain-den');
-                        break;
-                    case TERRAIN.GROUND:
-                    default:
-                        cellElement.classList.add('terrain-ground');
-                        break;
-                }
-
-                // 3. Add piece if exists and game is running or initial setup requested display
-                if (!initialClear && cellData) {
-                     cellElement.innerText = cellData.piece;
-                     // Add piece color class directly to the TD
-                     cellElement.classList.add(`piece-${cellData.color}`);
-                }
-
-                // 4. Highlight selected cell
-                if (selectedCell && selectedCell.row === r && selectedCell.col === c) {
-                    cellElement.classList.add('selected');
-                }
-                // No need for explicit remove('selected') here if we clear classes at the start
-            }
-        }
-
-         // Clear status if initial clear before game start
-         if (initialClear) {
-             statusElement.innerText = 'Select your side and press Start Game.';
-         }
-    }
-
-    // --- Game Logic Helper Functions ---
-
-    function getTerrain(row, col) {
-        if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
-            return null; // Out of bounds
-        }
-        return terrainMap[row][col];
-    }
-
-    function isOwnDen(terrain, color) {
-        // Checks if the terrain is the Den belonging to the piece's color
-        return (terrain === TERRAIN.RED_DEN && color === PLAYER_RED) ||
-               (terrain === TERRAIN.BLACK_DEN && color === PLAYER_BLACK);
-    }
-
-     function isEnemyTrap(terrain, color) {
-         // Checks if the terrain is a Trap belonging to the opponent
-        return (terrain === TERRAIN.BLACK_TRAP && color === PLAYER_RED) ||
-               (terrain === TERRAIN.RED_TRAP && color === PLAYER_BLACK);
-    }
-
-    function canCapture(attackerPieceInfo, defenderPieceInfo, attackerRow, attackerCol, defenderTerrain) {
-        if (!attackerPieceInfo || !defenderPieceInfo) return false; // Cannot capture empty square
-
-        // Rank is 0 if defender is in an enemy trap
-        const defenderRank = isEnemyTrap(defenderTerrain, attackerPieceInfo.color) ? 0 : PIECES[defenderPieceInfo.piece].rank;
-        const attackerRank = PIECES[attackerPieceInfo.piece].rank;
-        const attackerTerrain = getTerrain(attackerRow, attackerCol); // Need attacker's location
-
-        // Special case: Rat captures Elephant
-        if (attackerPieceInfo.piece === 'R' && defenderPieceInfo.piece === 'E') {
-            // But not if Rat is currently in water
-             if (attackerTerrain === TERRAIN.WATER) return false;
-            return true;
-        }
-
-        // Special case: Elephant cannot capture Rat (on land)
-        if (attackerPieceInfo.piece === 'E' && defenderPieceInfo.piece === 'R') {
-             // Exception: Elephant CAN capture Rat if Rat is in water
-             if (defenderTerrain === TERRAIN.WATER) return true;
-            return false;
-        }
-
-        // Special case: Rat cannot capture from water
-        if (attackerPieceInfo.piece === 'R' && attackerTerrain === TERRAIN.WATER) {
-            return false;
-        }
-
-        // General capture rule: Higher or equal rank captures lower rank (or rank 0 in trap)
-        return attackerRank >= defenderRank;
-    }
-
-
-    function isValidMove(startRow, startCol, endRow, endCol) {
-        // 1. Check Bounds
-        if (endRow < 0 || endRow >= BOARD_ROWS || endCol < 0 || col >= BOARD_COLS) {
-            return false; // Off the board
-        }
-
-        const pieceInfo = board[startRow][startCol];
-        if (!pieceInfo) return false; // No piece to move
-
-        const targetPieceInfo = board[endRow][endCol];
-        const startTerrain = getTerrain(startRow, startCol);
-        const targetTerrain = getTerrain(endRow, endCol);
-
-        // 2. Check Target Cell Occupancy by Own Piece
-        if (targetPieceInfo && targetPieceInfo.color === pieceInfo.color) {
-            return false; // Cannot capture own piece
-        }
-
-        // 3. Check Movement Rules (Standard Orthogonal or Jump)
-        const rowDiff = Math.abs(startRow - endRow);
-        const colDiff = Math.abs(startCol - endCol);
-        const pieceType = pieceInfo.piece;
-
-        // Standard 1-square orthogonal move
-        const isStandardMove = (rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1);
-
-        // Lion/Tiger Jump over Water
-        let isJump = false;
-        if ((pieceType === 'L' || pieceType === 'T')) {
-             // Vertical Jump (columns 1, 2, 4, 5)
-            if (colDiff === 0 && rowDiff === 4 && (startCol === 1 || startCol === 2 || startCol === 4 || startCol === 5)) {
-                 let pathClear = true;
-                 const step = (endRow > startRow) ? 1 : -1;
-                 // Check squares in between
-                 for(let r = startRow + step; r !== endRow; r += step) {
-                     // Path must be water AND empty
-                     if(getTerrain(r, startCol) !== TERRAIN.WATER || board[r][startCol] !== null) {
-                         pathClear = false;
-                         break;
-                     }
-                 }
-                 if(pathClear) isJump = true;
-            }
-             // Horizontal Jump (rows 3, 4, 5)
-            if (rowDiff === 0 && colDiff === 3 && (startRow >= 3 && startRow <= 5)) {
-                 let pathClear = true;
-                 const step = (endCol > startCol) ? 1 : -1;
-                 // Check squares in between
-                 for(let c = startCol + step; c !== endCol; c += step) {
-                     // Path must be water AND empty
-                     if(getTerrain(startRow, c) !== TERRAIN.WATER || board[startRow][c] !== null) {
-                         pathClear = false;
-                         break;
-                     }
-                 }
-                  if(pathClear) isJump = true;
-            }
-        }
-
-        // Must be standard move or valid jump
-        if (!isStandardMove && !isJump) {
-            return false;
-        }
-
-        // 4. Check Terrain Restrictions
-        // Cannot enter own Den
-        if (isOwnDen(targetTerrain, pieceInfo.color)) {
-            return false;
-        }
-
-        // Water rules
-        if (targetTerrain === TERRAIN.WATER) {
-            if (pieceType !== 'R') {
-                return false; // Only Rat can enter water
-            }
-        }
-
-        // Lion/Tiger jump cannot land in water
-         if(isJump && targetTerrain === TERRAIN.WATER) {
-             return false;
-         }
-
-        // 5. Check Capture Rules if target is occupied by enemy
-        if (targetPieceInfo) {
-            if (!canCapture(pieceInfo, targetPieceInfo, startRow, startCol, targetTerrain)) {
-                return false; // Invalid capture according to rules
-            }
-        }
-
-        // If all checks pass
-        return true;
-    }
-
-
-    function generateLegalMoves(color) {
-        const legalMoves = [];
-        for (let r = 0; r < BOARD_ROWS; r++) {
-            for (let c = 0; c < BOARD_COLS; c++) {
-                const pieceInfo = board[r][c];
-                if (pieceInfo && pieceInfo.color === color) {
-                    // Check standard orthogonal moves
-                    const possibleTargets = [
-                        { dr: -1, dc: 0 }, { dr: 1, dc: 0 },
-                        { dr: 0, dc: -1 }, { dr: 0, dc: 1 }
-                    ];
-
-                    possibleTargets.forEach(move => {
-                        const endRow = r + move.dr;
-                        const endCol = c + move.dc;
-                        if (isValidMove(r, c, endRow, endCol)) {
-                            legalMoves.push({ from: { row: r, col: c }, to: { row: endRow, col: endCol } });
-                        }
-                    });
-
-                    // Check jumps for Lion/Tiger
-                     if (pieceInfo.piece === 'L' || pieceInfo.piece === 'T') {
-                        const jumpTargets = [
-                             // Vertical Jumps
-                             {dr: 4, dc: 0}, {dr: -4, dc: 0},
-                             // Horizontal Jumps
-                             {dr: 0, dc: 3}, {dr: 0, dc: -3}
-                        ];
-                        jumpTargets.forEach(jump => {
-                             const endRow = r + jump.dr;
-                             const endCol = c + jump.dc;
-                             // isValidMove already checks jump path validity
-                             if (isValidMove(r, c, endRow, endCol)) {
-                                 legalMoves.push({ from: { row: r, col: c }, to: { row: endRow, col: endCol } });
-                             }
-                        });
-                    }
-                }
-            }
-        }
-        return legalMoves;
-    }
-
-    // --- Core Game Flow ---
-
-    function makeMove(from, to) {
-        const piece = board[from.row][from.col];
-        if (!piece) return; // Should not happen if called with valid move
-
-        const capturedPiece = board[to.row][to.col]; // For status message or logging
-
-        // Update board state
-        board[to.row][to.col] = piece;
-        board[from.row][from.col] = null;
-
-        // Check win condition: Entering opponent's den
-        const targetTerrain = getTerrain(to.row, to.col);
-        if ((targetTerrain === TERRAIN.BLACK_DEN && piece.color === PLAYER_RED) ||
-            (targetTerrain === TERRAIN.RED_DEN && piece.color === PLAYER_BLACK)) {
-            renderBoard(); // Show the final move
-            statusElement.innerText = `${piece.color.toUpperCase()} wins by reaching the den!`;
-            gameRunning = false;
-            isPlayerTurn = false; // Stop further interaction
-            boardElement.removeEventListener('click', handleCellClick); // Remove listener
-            return;
-        }
-
-        // Check win condition: Capturing all opponent pieces
-        let opponentPiecesLeft = 0;
-        const opponentColor = (piece.color === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
-        for (let r = 0; r < BOARD_ROWS; r++) {
-            for (let c = 0; c < BOARD_COLS; c++) {
-                if (board[r][c] && board[r][c].color === opponentColor) {
-                    opponentPiecesLeft++;
-                }
-            }
-        }
-         if (opponentPiecesLeft === 0) {
-            renderBoard();
-            statusElement.innerText = `${piece.color.toUpperCase()} wins by capturing all pieces!`;
-            gameRunning = false;
-            isPlayerTurn = false;
-            boardElement.removeEventListener('click', handleCellClick); // Remove listener
-            return;
-        }
-
-        // Switch player
-        currentPlayer = (currentPlayer === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
-        isPlayerTurn = (currentPlayer === playerSide); // Check if it's the human player's turn
-
-        updateStatus();
-        renderBoard(); // Render after state changes
-
-        // Trigger AI move if it's now AI's turn
-        if (!isPlayerTurn && gameRunning) {
-            // Use setTimeout to allow the board to render before AI 'thinks'
-            setTimeout(makeRandomAiMove, 250); // 250ms delay
-        }
-    }
-
-    function makeRandomAiMove() {
-        if (!gameRunning || isPlayerTurn) return; // Safety check
-
-        statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`; // Update status immediately
-
-        const legalMoves = generateLegalMoves(aiSide);
-
-        if (legalMoves.length === 0) {
-            // Determine winner based on who has no moves
-            const winner = (aiSide === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
-            statusElement.innerText = `AI (${aiSide.toUpperCase()}) has no legal moves! ${winner.toUpperCase()} wins!`;
-            gameRunning = false;
-            boardElement.removeEventListener('click', handleCellClick); // Remove listener
-            return;
-        }
-
-        // Select a random move
-        const randomIndex = Math.floor(Math.random() * legalMoves.length);
-        const move = legalMoves[randomIndex];
-
-        // Log AI move (optional)
-        const movingPiece = board[move.from.row][move.from.col];
-        console.log(`AI (${aiSide}) randomly moving ${movingPiece?.piece} from (${move.from.row},${move.from.col}) to (${move.to.row},${move.to.col})`);
-
-        // Execute the move
-        makeMove(move.from, move.to);
-    }
-
-    function updateStatus() {
-        if (!gameRunning) {
-             // Final win message is set in makeMove when game ends
-             return;
-        }
-
-        if (isPlayerTurn) {
-            if (selectedCell) {
-                 const piece = board[selectedCell.row][selectedCell.col];
-                 statusElement.innerText = `${playerSide.toUpperCase()}'s turn. Select destination for ${piece?.piece}.`;
-            } else {
-                statusElement.innerText = `${playerSide.toUpperCase()}'s turn. Select a piece to move.`;
-            }
-        } else {
-            // Status set at the start of makeRandomAiMove
-            // statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`;
-        }
-    }
-
-    // --- Event Handlers ---
-
-    function handleCellClick(event) {
-        if (!gameRunning || !isPlayerTurn) return; // Only handle clicks if game running and player's turn
-
-        const cellElement = event.target.closest('td'); // Handle clicks on pieces inside cells too
-        if (!cellElement || !cellElement.id.startsWith('cell-')) return; // Clicked outside a cell
-
-        const parts = cellElement.id.split('-'); // "cell-r-c"
-        const row = parseInt(parts[1], 10);
-        const col = parseInt(parts[2], 10);
-
-        const clickedPieceInfo = board[row][col];
-
-        if (selectedCell) {
-            // A piece was already selected, try to move
-            const startRow = selectedCell.row;
-            const startCol = selectedCell.col;
-
-            if (startRow === row && startCol === col) {
-                // Clicked the same piece again, deselect
-                selectedCell = null;
-                renderBoard(); // Remove highlight
-                updateStatus();
-                return;
-            }
-
-            if (isValidMove(startRow, startCol, row, col)) {
-                const moveFrom = { row: startRow, col: startCol };
-                const moveTo = { row: row, col: col };
-                selectedCell = null; // Deselect BEFORE making the move
-                makeMove(moveFrom, moveTo);
-                // makeMove handles rendering, status update, and AI turn trigger
-            } else {
-                // Invalid move target
-                console.log("Invalid move attempt.");
-                // Optionally provide feedback to user in statusElement
-                // Deselect the piece
-                selectedCell = null;
-                renderBoard(); // Remove highlight
-                updateStatus(); // Reset status message
-            }
-        } else {
-            // No piece selected yet, try to select
-            if (clickedPieceInfo && clickedPieceInfo.color === playerSide) {
-                selectedCell = { row: row, col: col };
-                renderBoard(); // Highlight the selected cell
-                updateStatus(); // Update status to show selected piece
-            }
-        }
-    }
-
-    // Side change just updates variables, doesn't restart
-    function handleSideChange() {
-        if (gameRunning) return; // Don't allow side change mid-game
-        // Logic moved to handleStartGame to read selection just before starting
-        console.log(`Side selection changed.`);
-    }
-
-    function handleThemeToggle() {
-        document.body.classList.toggle('dark-mode');
-        console.log("Theme toggled.");
-    }
-
-    function handleStartGame() {
-        if (gameRunning) return; // Prevent starting multiple times
-        console.log("Starting game...");
-
-        // 1. Determine sides based on radio buttons *now*
-        playerSide = sideRedRadio.checked ? PLAYER_RED : PLAYER_BLACK;
-        aiSide = (playerSide === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
-        console.log(`Player starts as ${playerSide}, AI is ${aiSide}. Red moves first.`);
-
-        // 2. Setup board and initial state
-        setupInitialBoard();
-        currentPlayer = PLAYER_RED; // Red always moves first
-        isPlayerTurn = (currentPlayer === playerSide);
-        selectedCell = null;
-        gameRunning = true;
-
-        // 3. Disable setup controls
-        sideSelectionFieldset.disabled = true;
-        startGameButton.disabled = true;
-        // Depth selector remains disabled for now
-        depthSelector.disabled = true;
-        depthSelector.style.opacity = 0.5;
-
-        // 4. Add board click listener (remove first to avoid duplicates if buggy)
-        boardElement.removeEventListener('click', handleCellClick);
-        boardElement.addEventListener('click', handleCellClick);
-
-        // 5. Render the starting position and update status
-        renderBoard();
-        updateStatus();
-
-        // 6. If AI needs to make the first move
-        if (!isPlayerTurn) {
-            setTimeout(makeRandomAiMove, 500); // Give AI a moment
-        }
-    }
-
-    // --- Initial Setup on Page Load ---
+    /** Sets up the initial UI state before the game starts. */
     function initialUISetup() {
+        if (!cacheUIElements()) return; // Stop if elements missing
+
         renderBoard(true); // Render empty board initially with terrain
         statusElement.innerText = 'Select your side and press Start Game.';
 
@@ -570,12 +127,436 @@ document.addEventListener('DOMContentLoaded', () => {
         startGameButton.disabled = false;
         depthSelector.disabled = true; // Keep depth disabled
         depthSelector.style.opacity = 0.5;
-
-        // Board listener is added ONLY when game starts
     }
 
-    // --- Run Initial UI Setup ---
-    initialUISetup();
+    // ==========================================================================
+    // Rendering Logic
+    // ==========================================================================
+
+    /** Updates the visual representation of the board in HTML. */
+    function renderBoard(initialClear = false) {
+        if (!boardElement) return; // Don't render if board element not found
+
+        for (let r = 0; r < BOARD_ROWS; r++) {
+            for (let c = 0; c < BOARD_COLS; c++) {
+                const cellElement = document.getElementById(`cell-${r}-${c}`);
+                if (!cellElement) continue;
+
+                const cellData = board[r]?.[c]; // Use optional chaining for safety
+                const terrain = terrainMap[r]?.[c];
+
+                // --- Update Cell Appearance ---
+                // 1. Clear previous dynamic state
+                cellElement.innerText = '';
+                cellElement.classList.remove(
+                    'terrain-ground', 'terrain-water', 'terrain-trap', 'terrain-den',
+                    'piece-red', 'piece-black', 'selected'
+                );
+
+                // 2. Add terrain class
+                switch (terrain) {
+                    case TERRAIN.WATER: cellElement.classList.add('terrain-water'); break;
+                    case TERRAIN.RED_TRAP: case TERRAIN.BLACK_TRAP: cellElement.classList.add('terrain-trap'); break;
+                    case TERRAIN.RED_DEN: case TERRAIN.BLACK_DEN: cellElement.classList.add('terrain-den'); break;
+                    case TERRAIN.GROUND: default: cellElement.classList.add('terrain-ground'); break;
+                }
+
+                // 3. Add piece if exists (and not initial clear)
+                if (!initialClear && cellData) {
+                    cellElement.innerText = cellData.piece;
+                    cellElement.classList.add(`piece-${cellData.color}`);
+                }
+
+                // 4. Highlight selected cell
+                if (selectedCell && selectedCell.row === r && selectedCell.col === c) {
+                    cellElement.classList.add('selected');
+                }
+            }
+        }
+
+        // Clear status if initial clear before game start
+        if (initialClear && statusElement) {
+            statusElement.innerText = 'Select your side and press Start Game.';
+        }
+    }
+
+    // ==========================================================================
+    // Rules Engine & Move Validation
+    // ==========================================================================
+
+    /** Gets the terrain type at a given coordinate. */
+    function getTerrain(row, col) {
+        if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) return null;
+        return terrainMap[row][col];
+    }
+
+    /** Checks if the terrain is the Den belonging to the piece's color. */
+    function isOwnDen(terrain, color) {
+        return (terrain === TERRAIN.RED_DEN && color === PLAYER_RED) ||
+               (terrain === TERRAIN.BLACK_DEN && color === PLAYER_BLACK);
+    }
+
+    /** Checks if the terrain is a Trap belonging to the opponent. */
+    function isEnemyTrap(terrain, color) {
+        return (terrain === TERRAIN.BLACK_TRAP && color === PLAYER_RED) ||
+               (terrain === TERRAIN.RED_TRAP && color === PLAYER_BLACK);
+    }
+
+    /** Determines if the attacker can capture the defender based on ranks, terrain, and special rules. */
+    function canCapture(attackerPieceInfo, defenderPieceInfo, attackerRow, attackerCol, defenderTerrain) {
+        if (!attackerPieceInfo || !defenderPieceInfo) return false;
+
+        const defenderRank = isEnemyTrap(defenderTerrain, attackerPieceInfo.color) ? 0 : PIECES[defenderPieceInfo.piece].rank;
+        const attackerRank = PIECES[attackerPieceInfo.piece].rank;
+        const attackerTerrain = getTerrain(attackerRow, attackerCol);
+
+        // Rat vs Elephant
+        if (attackerPieceInfo.piece === 'R' && defenderPieceInfo.piece === 'E') {
+            return attackerTerrain !== TERRAIN.WATER; // Rat cannot capture Elephant if Rat is in water
+        }
+        if (attackerPieceInfo.piece === 'E' && defenderPieceInfo.piece === 'R') {
+            return defenderTerrain === TERRAIN.WATER; // Elephant CAN capture Rat ONLY if Rat is in water
+        }
+        // Rat cannot capture from water
+        if (attackerPieceInfo.piece === 'R' && attackerTerrain === TERRAIN.WATER) {
+            return false;
+        }
+        // General capture rule
+        return attackerRank >= defenderRank;
+    }
+
+    /** Checks if a move from (startRow, startCol) to (endRow, endCol) is legal. */
+    function isValidMove(startRow, startCol, endRow, endCol) {
+        // Basic bounds check
+        if (endRow < 0 || endRow >= BOARD_ROWS || endCol < 0 || endCol >= BOARD_COLS) return false;
+
+        const pieceInfo = board[startRow]?.[startCol];
+        if (!pieceInfo) return false; // No piece at start
+
+        const targetPieceInfo = board[endRow]?.[endCol];
+        const startTerrain = getTerrain(startRow, startCol);
+        const targetTerrain = getTerrain(endRow, endCol);
+
+        // Cannot capture own piece
+        if (targetPieceInfo && targetPieceInfo.color === pieceInfo.color) return false;
+
+        // Check movement type (Standard Orthogonal or Jump)
+        const rowDiff = Math.abs(startRow - endRow);
+        const colDiff = Math.abs(startCol - endCol);
+        const pieceType = pieceInfo.piece;
+        const isStandardMove = (rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1);
+        let isJump = false;
+        if (pieceType === 'L' || pieceType === 'T') {
+            // Vertical Jump check
+            if (colDiff === 0 && rowDiff === 4 && (startCol === 1 || startCol === 2 || startCol === 4 || startCol === 5)) {
+                let pathClear = true; const step = (endRow > startRow) ? 1 : -1;
+                for (let r = startRow + step; r !== endRow; r += step) { if (getTerrain(r, startCol) !== TERRAIN.WATER || board[r][startCol] !== null) { pathClear = false; break; } }
+                if (pathClear) isJump = true;
+            }
+            // Horizontal Jump check
+            if (!isJump && rowDiff === 0 && colDiff === 3 && (startRow >= 3 && startRow <= 5)) {
+                let pathClear = true; const step = (endCol > startCol) ? 1 : -1;
+                for (let c = startCol + step; c !== endCol; c += step) { if (getTerrain(startRow, c) !== TERRAIN.WATER || board[startRow][c] !== null) { pathClear = false; break; } }
+                if (pathClear) isJump = true;
+            }
+        }
+        if (!isStandardMove && !isJump) return false; // Invalid movement pattern
+
+        // Check Terrain Restrictions
+        if (isOwnDen(targetTerrain, pieceInfo.color)) return false; // Cannot enter own Den
+        if (targetTerrain === TERRAIN.WATER && pieceType !== 'R') return false; // Only Rat in water
+        if (isJump && targetTerrain === TERRAIN.WATER) return false; // Jump cannot land in water
+
+        // Check Capture Rules if it's a capture
+        if (targetPieceInfo) {
+            if (!canCapture(pieceInfo, targetPieceInfo, startRow, startCol, targetTerrain)) return false;
+        }
+
+        return true; // If all checks pass
+    }
+
+    /** Generates a list of all legal moves for the given color. */
+    function generateLegalMoves(color) {
+        const legalMoves = [];
+        for (let r = 0; r < BOARD_ROWS; r++) {
+            for (let c = 0; c < BOARD_COLS; c++) {
+                const pieceInfo = board[r]?.[c];
+                if (pieceInfo && pieceInfo.color === color) {
+                    // Standard moves
+                    const stdMoves = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }];
+                    stdMoves.forEach(move => {
+                        if (isValidMove(r, c, r + move.dr, c + move.dc)) {
+                            legalMoves.push({ from: { row: r, col: c }, to: { row: r + move.dr, col: c + move.dc } });
+                        }
+                    });
+                    // Jumps for Lion/Tiger
+                    if (pieceInfo.piece === 'L' || pieceInfo.piece === 'T') {
+                        const jumpMoves = [{ dr: 4, dc: 0 }, { dr: -4, dc: 0 }, { dr: 0, dc: 3 }, { dr: 0, dc: -3 }];
+                        jumpMoves.forEach(jump => {
+                            if (isValidMove(r, c, r + jump.dr, c + jump.dc)) {
+                                legalMoves.push({ from: { row: r, col: c }, to: { row: r + jump.dr, col: c + jump.dc } });
+                            }
+                        });
+                    }
+                }
+            }
+        }
+        return legalMoves;
+    }
+
+    // ==========================================================================
+    // Game Flow & Turn Management
+    // ==========================================================================
+
+    /** Executes a move, updates state, checks win conditions, and switches turn. */
+    function makeMove(from, to) {
+        if (!gameRunning) return;
+
+        const piece = board[from.row][from.col];
+        if (!piece) {
+            console.error("Attempted to move empty square:", from);
+            return;
+        }
+
+        // Perform the move
+        board[to.row][to.col] = piece;
+        board[from.row][from.col] = null;
+        selectedCell = null; // Ensure deselection after move
+
+        // Check for win conditions
+        if (checkWinCondition(piece.color, to.row, to.col)) {
+            endGame(piece.color); // Pass winner color
+            return; // Stop further processing
+        }
+
+        // Switch player
+        currentPlayer = (currentPlayer === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
+        isPlayerTurn = (currentPlayer === playerSide);
+
+        // Update UI
+        renderBoard();
+        updateStatus();
+
+        // Trigger AI turn if necessary
+        if (!isPlayerTurn && gameRunning) {
+            // Use setTimeout to avoid blocking the UI thread and allow rendering
+            setTimeout(makeAiMove, AI_MOVE_DELAY_MS);
+        }
+    }
+
+    /** Checks if the game has ended based on the last move. */
+    function checkWinCondition(moverColor, landedRow, landedCol) {
+        // 1. Den Entry Win
+        const targetTerrain = getTerrain(landedRow, landedCol);
+        if ((targetTerrain === TERRAIN.BLACK_DEN && moverColor === PLAYER_RED) ||
+            (targetTerrain === TERRAIN.RED_DEN && moverColor === PLAYER_BLACK)) {
+            return true; // Den capture win
+        }
+
+        // 2. Capture All Pieces Win
+        const opponentColor = (moverColor === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
+        let opponentPiecesLeft = 0;
+        for (let r = 0; r < BOARD_ROWS; r++) {
+            for (let c = 0; c < BOARD_COLS; c++) {
+                if (board[r]?.[c]?.color === opponentColor) {
+                    opponentPiecesLeft++;
+                    break; // Found one, no need to check further in this row
+                }
+            }
+             if (opponentPiecesLeft > 0) break; // Found one, no need to check further rows
+        }
+        if (opponentPiecesLeft === 0) {
+            return true; // All opponent pieces captured
+        }
+
+        // 3. No Legal Moves (Stalemate/Loss for current player) - Checked before AI move
+        // This function only checks wins caused *by* the current move.
+
+        return false;
+    }
+
+     /** Ends the game and displays the winner. */
+     function endGame(winnerColor, reason = "win") {
+         gameRunning = false;
+         isPlayerTurn = false; // Prevent further moves
+         boardElement?.removeEventListener('click', handleCellClick); // Remove listener
+
+         let message = "";
+         if (reason === "win") {
+             message = `${winnerColor.toUpperCase()} wins!`;
+             // More specific win reasons checked in makeMove/checkWinCondition
+         } else if (reason === "no_moves") {
+             message = `${winnerColor === PLAYER_RED ? PLAYER_BLACK : PLAYER_RED} has no legal moves! ${winnerColor.toUpperCase()} wins!`;
+         } else {
+             message = "Game Over!";
+         }
+
+         statusElement.innerText = message;
+         console.log("Game ended:", message);
+         renderBoard(); // Final render
+     }
+
+
+    // ==========================================================================
+    // AI Logic (Random Mover)
+    // ==========================================================================
+
+    /** Makes the AI choose and execute a random legal move. */
+    function makeAiMove() {
+        if (!gameRunning || isPlayerTurn) return;
+
+        statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`;
+
+        // Use console.time for basic performance measurement
+        console.time("AI Move Calculation");
+
+        const legalMoves = generateLegalMoves(aiSide);
+
+        console.timeEnd("AI Move Calculation"); // See how long generation takes
+
+        if (legalMoves.length === 0) {
+            // AI has no moves, the other player wins
+            endGame((aiSide === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED, "no_moves");
+            return;
+        }
+
+        // Select a random move
+        const randomIndex = Math.floor(Math.random() * legalMoves.length);
+        const move = legalMoves[randomIndex];
+
+        // Log AI move (optional)
+        const movingPiece = board[move.from.row]?.[move.from.col];
+        console.log(`AI (${aiSide}) moving ${movingPiece?.piece} from (${move.from.row},${move.from.col}) to (${move.to.row},${move.to.col})`);
+
+        // Execute the move
+        makeMove(move.from, move.to);
+    }
+
+    // ==========================================================================
+    // UI Interaction & Event Handlers
+    // ==========================================================================
+
+    /** Handles clicks on the game board cells. */
+    function handleCellClick(event) {
+        if (!gameRunning || !isPlayerTurn) return; // Ignore clicks if not player's turn
+
+        const cellElement = event.target.closest('td');
+        if (!cellElement || !cellElement.id.startsWith('cell-')) return;
+
+        const parts = cellElement.id.split('-');
+        const row = parseInt(parts[1], 10);
+        const col = parseInt(parts[2], 10);
+
+        const clickedPieceInfo = board[row]?.[col];
+
+        if (selectedCell) {
+            // Piece already selected, try to move or deselect
+            const startRow = selectedCell.row;
+            const startCol = selectedCell.col;
+
+            if (startRow === row && startCol === col) { // Clicked same piece
+                selectedCell = null;
+            } else if (isValidMove(startRow, startCol, row, col)) { // Valid move target
+                const moveFrom = { row: startRow, col: startCol };
+                const moveTo = { row: row, col: col };
+                // Deselection and state update happens within makeMove
+                makeMove(moveFrom, moveTo);
+                 // Return early as makeMove handles render/status/AI trigger
+                 return;
+            } else { // Invalid move target
+                console.log("Invalid move target.");
+                selectedCell = null; // Deselect on invalid click
+            }
+        } else {
+            // No piece selected, try to select player's piece
+            if (clickedPieceInfo && clickedPieceInfo.color === playerSide) {
+                selectedCell = { row: row, col: col };
+            }
+        }
+
+        // Update UI after selection/deselection/invalid move attempt
+        renderBoard();
+        updateStatus();
+    }
+
+    /** Handles changes to the player side selection radio buttons. */
+    function handleSideChange() {
+        if (gameRunning) return; // Don't allow side change mid-game
+        // Actual state setting happens in handleStartGame
+        console.log("Side selection changed (will apply on Start).");
+    }
+
+    /** Toggles the dark mode theme. */
+    function handleThemeToggle() {
+        document.body.classList.toggle('dark-mode');
+        console.log("Theme toggled.");
+    }
+
+    /** Starts a new game when the Start button is clicked. */
+    function handleStartGame() {
+        if (gameRunning) return; // Prevent starting multiple times
+        console.log("Starting new game...");
+
+        // 1. Determine sides
+        playerSide = sideRedRadio.checked ? PLAYER_RED : PLAYER_BLACK;
+        aiSide = (playerSide === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED;
+        console.log(`Player: ${playerSide}, AI: ${aiSide}. Red moves first.`);
+
+        // 2. Setup board and initial state
+        setupInitialBoard();
+        currentPlayer = PLAYER_RED; // Red always starts
+        isPlayerTurn = (currentPlayer === playerSide);
+        selectedCell = null;
+        gameRunning = true;
+
+        // 3. Update UI state
+        sideSelectionFieldset.disabled = true;
+        startGameButton.disabled = true;
+        depthSelector.disabled = true; // Still disabled
+        depthSelector.style.opacity = 0.5;
+
+        // 4. Add board listener
+        boardElement.removeEventListener('click', handleCellClick); // Ensure no duplicates
+        boardElement.addEventListener('click', handleCellClick);
+
+        // 5. Initial render and status
+        renderBoard();
+        updateStatus();
+
+        // 6. Trigger first AI move if needed
+        if (!isPlayerTurn && gameRunning) {
+            setTimeout(makeAiMove, AI_MOVE_DELAY_MS * 2); // Slightly longer delay for first move
+        }
+    }
+
+    /** Updates the text in the status display area. */
+    function updateStatus() {
+        if (!statusElement) return;
+
+        if (!gameRunning) {
+             // Final win message is set by endGame
+             return;
+        }
+
+        if (isPlayerTurn) {
+            if (selectedCell) {
+                 const piece = board[selectedCell.row]?.[selectedCell.col];
+                 statusElement.innerText = `${playerSide.toUpperCase()}'s turn. Select destination for ${piece?.piece}.`;
+            } else {
+                statusElement.innerText = `${playerSide.toUpperCase()}'s turn. Select a piece.`;
+            }
+        } else {
+             // Status set at the start of makeAiMove
+             statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`;
+        }
+    }
+
+    // ==========================================================================
+    // Script Entry Point
+    // ==========================================================================
+
+    initializeTerrainMap();
+    initialUISetup(); // Sets up UI elements and pre-game listeners
 
 }); // End DOMContentLoaded
 
