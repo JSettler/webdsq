@@ -94,29 +94,35 @@ document.addEventListener('DOMContentLoaded', () => {
         terrainMap[0][3] = TERRAIN.RED_DEN; terrainMap[8][3] = TERRAIN.BLACK_DEN;
     }
 
-    /** Sets up the pieces on the board to their starting positions (HORIZONTALLY MIRRORED). */
+    /** Sets up the pieces on the board to their standard starting positions. */
     function setupInitialBoard() {
         board = Array(BOARD_ROWS).fill(null).map(() => Array(BOARD_COLS).fill(null));
 
-        // Place Red pieces (bottom) - MIRRORED
-        board[0][6] = { piece: 'L', color: PLAYER_RED }; // Swapped L and T
-        board[0][0] = { piece: 'T', color: PLAYER_RED };
-        board[1][5] = { piece: 'D', color: PLAYER_RED }; // Swapped D and C
-        board[1][1] = { piece: 'C', color: PLAYER_RED };
-        board[2][6] = { piece: 'R', color: PLAYER_RED }; // Swapped R and E
-        board[2][4] = { piece: 'P', color: PLAYER_RED }; // Swapped P and W
-        board[2][2] = { piece: 'W', color: PLAYER_RED };
-        board[2][0] = { piece: 'E', color: PLAYER_RED };
+        // --- Red pieces (Bottom, Row 0-2) ---
+        // Row 0 (Bottom row)
+        board[0][0] = { piece: 'T', color: PLAYER_RED }; // Tiger Left
+        board[0][6] = { piece: 'L', color: PLAYER_RED }; // Lion Right
+        // Row 1
+        board[1][1] = { piece: 'C', color: PLAYER_RED }; // Cat Left
+        board[1][5] = { piece: 'D', color: PLAYER_RED }; // Dog Right
+        // Row 2
+        board[2][0] = { piece: 'E', color: PLAYER_RED }; // Elephant Left
+        board[2][2] = { piece: 'W', color: PLAYER_RED }; // Wolf Left-Center
+        board[2][4] = { piece: 'P', color: PLAYER_RED }; // Leopard Right-Center
+        board[2][6] = { piece: 'R', color: PLAYER_RED }; // Rat Right
 
-        // Place Black pieces (top) - MIRRORED
-        board[8][0] = { piece: 'L', color: PLAYER_BLACK }; // Swapped L and T
-        board[8][6] = { piece: 'T', color: PLAYER_BLACK };
-        board[7][1] = { piece: 'D', color: PLAYER_BLACK }; // Swapped D and C
-        board[7][5] = { piece: 'C', color: PLAYER_BLACK };
-        board[6][0] = { piece: 'R', color: PLAYER_BLACK }; // Swapped R and E
-        board[6][2] = { piece: 'P', color: PLAYER_BLACK }; // Swapped P and W
-        board[6][4] = { piece: 'W', color: PLAYER_BLACK };
-        board[6][6] = { piece: 'E', color: PLAYER_BLACK };
+        // --- Black pieces (Top, Row 6-8) ---
+        // Row 8 (Top row)
+        board[8][0] = { piece: 'L', color: PLAYER_BLACK }; // Lion Left
+        board[8][6] = { piece: 'T', color: PLAYER_BLACK }; // Tiger Right
+        // Row 7
+        board[7][1] = { piece: 'D', color: PLAYER_BLACK }; // Dog Left
+        board[7][5] = { piece: 'C', color: PLAYER_BLACK }; // Cat Right
+        // Row 6
+        board[6][0] = { piece: 'R', color: PLAYER_BLACK }; // Rat Left
+        board[6][2] = { piece: 'P', color: PLAYER_BLACK }; // Leopard Left-Center
+        board[6][4] = { piece: 'W', color: PLAYER_BLACK }; // Wolf Right-Center
+        board[6][6] = { piece: 'E', color: PLAYER_BLACK }; // Elephant Right
     }
 
     /** Sets up the initial UI state before the game starts. */
