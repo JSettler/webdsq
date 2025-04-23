@@ -1,48 +1,51 @@
-/* style.css */
+/* style.css - Complete Styles for Jungle Chess */
 
 /* --- Base Styles (Day Mode) --- */
 body {
     font-family: sans-serif;
-    background-color: #f4f4f4;
-    color: #333;
+    background-color: #f4f4f4; /* Light grey background */
+    color: #333; /* Dark grey text */
     transition: background-color 0.3s, color 0.3s;
+    padding: 10px; /* Add some padding around the content */
+}
+
+h1 {
+    text-align: center;
 }
 
 table {
     border-collapse: collapse;
-    margin: 20px auto;
-    border: 3px solid #333;
+    margin: 20px auto; /* Center the table */
+    border: 3px solid #333; /* Dark border around the board */
+    box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow */
 }
 
 td { /* Base style for all cells */
     width: 50px;
     height: 50px;
-    border: 1px solid #555; /* Grid lines */
+    border: 1px solid #555; /* Medium grey grid lines */
     text-align: center;
     vertical-align: middle;
     font-size: 24px;
     font-weight: bold;
     cursor: pointer;
-    transition: background-color 0.3s;
-    background-color: #8B4513; /* DEFAULT GROUND COLOR FOR TD */
+    transition: background-color 0.3s ease-in-out; /* Smooth background transition */
+    background-color: #8B4513; /* DEFAULT GROUND COLOR (SaddleBrown) */
+    position: relative; /* Needed for potential future overlays or effects */
 }
 
 /* --- Specific Terrain Colors (Day Mode) --- */
 td.terrain-water { background-color: #4682B4; } /* SteelBlue */
 td.terrain-trap { background-color: #DC143C; } /* Crimson */
 td.terrain-den { background-color: #000000; color: white; } /* Black den */
-td.terrain-ground { background-color: #8B4513; } /* Explicit ground */
+td.terrain-ground { background-color: #8B4513; } /* Explicit ground (SaddleBrown) */
 
 /* --- Piece Colors (Day Mode) --- */
 .piece-red { color: red; }
 .piece-black { color: black; }
 
-/* Ensure den text color overrides piece color */
-td.terrain-den .piece-red, /* If piece is child element */
-td.terrain-den .piece-black {
-    color: white;
-}
-/* Den text color if piece IS the TD (applied via class) */
+/* Ensure den text color overrides piece color if piece is inside the TD */
+/* This might need adjustment if pieces become separate elements later */
 td.terrain-den.piece-red,
 td.terrain-den.piece-black {
     color: white;
@@ -51,17 +54,18 @@ td.terrain-den.piece-black {
 
 /* --- Dark Mode Styles --- */
 body.dark-mode {
-    background-color: #333;
-    color: #f4f4f4;
+    background-color: #2c2c2c; /* Dark grey background */
+    color: #e0e0e0; /* Light grey text */
 }
 
 body.dark-mode table {
-     border: 3px solid #ccc;
+     border: 3px solid #aaa; /* Lighter border in dark mode */
+     box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4); /* Darker shadow */
 }
 
 body.dark-mode td { /* Base TD in dark mode */
-    border-color: #aaa;
-    background-color: #5a2d0c; /* Darker brown DEFAULT */
+    border-color: #777; /* Lighter grid lines */
+    background-color: #5a2d0c; /* Darker brown DEFAULT ground */
 }
 
 /* Specific dark mode terrain colors */
@@ -72,56 +76,70 @@ body.dark-mode td.terrain-ground { background-color: #5a2d0c; } /* Explicit dark
 
 /* Dark mode piece colors */
 body.dark-mode .piece-red { color: #FF6347; } /* Tomato Red */
-body.dark-mode .piece-black { color: #bbb; } /* Lighter Grey for dark mode black */
+body.dark-mode .piece-black { color: #cccccc; } /* Light Grey for dark mode black */
 
 /* Adjust den text color in dark mode */
-body.dark-mode td.terrain-den .piece-red,
-body.dark-mode td.terrain-den .piece-black {
-     color: white;
-}
 body.dark-mode td.terrain-den.piece-red,
 body.dark-mode td.terrain-den.piece-black {
      color: white;
 }
 
 
-/* --- Other Styles --- */
+/* --- UI Controls Styling --- */
 .controls {
     text-align: center;
     margin-bottom: 20px;
+    padding: 10px;
+    background-color: #eee; /* Light background for controls */
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
 }
 
 label {
     margin-right: 5px;
+    margin-left: 10px; /* Add space before labels */
+    vertical-align: middle;
 }
 
-select, button, input {
-    margin: 5px 10px;
+select, button, input[type="radio"] {
+    margin: 5px 5px; /* Consistent margin */
     padding: 8px 12px;
     cursor: pointer;
+    vertical-align: middle; /* Align controls better */
 }
+
+button, select {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #fff;
+}
+button:hover, select:hover {
+    border-color: #aaa;
+}
+button:disabled, select:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 
 fieldset {
     display: inline-block;
     border: 1px solid #ccc;
-    padding: 10px;
+    padding: 10px 15px;
     margin: 0 10px;
+    border-radius: 4px;
+    vertical-align: middle;
 }
-
-#gameStatus {
-     text-align: center;
-     margin-top: 20px;
-     font-weight: bold;
-     min-height: 1.2em; /* Prevent layout shift */
-}
-
-/* Highlight for selected piece */
-.selected {
-    outline: 3px solid yellow;
-    outline-offset: -3px;
+legend {
+    font-weight: bold;
+    padding: 0 5px;
 }
 
 /* Dark mode controls */
+body.dark-mode .controls {
+    background-color: #444;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+}
 body.dark-mode fieldset {
     border-color: #888;
 }
@@ -131,6 +149,47 @@ body.dark-mode select {
     color: #f4f4f4;
     border: 1px solid #888;
 }
+body.dark-mode button:hover,
+body.dark-mode select:hover {
+    border-color: #bbb;
+    background-color: #666;
+}
 body.dark-mode input[type="radio"]:checked + label {
-    font-weight: bold; /* Example highlight */
+    font-weight: bold;
+    color: #fff; /* Highlight selected radio label */
+}
+
+/* --- Game Status & Highlights --- */
+#gameStatus {
+     text-align: center;
+     margin-top: 20px;
+     font-weight: bold;
+     font-size: 1.1em;
+     min-height: 1.2em; /* Prevent layout shift */
+}
+
+/* Highlight for selected piece */
+.selected {
+    outline: 3px solid yellow;
+    outline-offset: -3px; /* Inset outline slightly */
+}
+
+/* Highlight for last AI move */
+td.last-move-from {
+    background-color: #b0e0e6cc; /* Powder blue with some transparency */
+    /* Using background blend mode might be smoother if needed */
+}
+td.last-move-to {
+    background-color: #add8e6cc; /* Light blue with some transparency */
+}
+
+/* Dark mode adjustments for last move */
+body.dark-mode td.last-move-from {
+    background-color: #3a5f7acc; /* Darker blue/grey with transparency */
+}
+body.dark-mode td.last-move-to {
+    background-color: #4682b4cc; /* Steel blue with transparency */
+    /* Alternative: Use outline for dark mode if background clashes */
+    /* outline: 2px solid cyan;
+       outline-offset: -2px; */
 }
