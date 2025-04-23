@@ -1,10 +1,12 @@
-// game.js - Complete Code with Last Move Highlight + Piece Set Toggle
+// game.js - ** DEBUGGING VERSION ** - Refactored + Last Move Highlight + 1-Ply AI + Logs
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM Content Loaded. Initializing script..."); // DEBUG
 
     // ==========================================================================
     // Constants & Configuration
     // ==========================================================================
+    // ... (Keep Constants section exactly the same as before) ...
     const BOARD_ROWS = 9;
     const BOARD_COLS = 7;
     const PIECES = { R: { rank: 1, name: 'Rat' }, C: { rank: 2, name: 'Cat' }, D: { rank: 3, name: 'Dog' }, W: { rank: 4, name: 'Wolf' }, P: { rank: 5, name: 'Leopard' }, T: { rank: 6, name: 'Tiger' }, L: { rank: 7, name: 'Lion' }, E: { rank: 8, name: 'Elephant' } };
@@ -14,12 +16,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const AI_MOVE_DELAY_MS = 150;
     const WIN_SCORE = 10000;
     const LOSS_SCORE = -10000;
-    const PIECE_SET_LETTERS = 'letters'; // ** ADDED **
-    const PIECE_SET_NUMBERS = 'numbers'; // ** ADDED **
+    const PIECE_SET_LETTERS = 'letters';
+    const PIECE_SET_NUMBERS = 'numbers';
+
 
     // ==========================================================================
     // Game State Variables
     // ==========================================================================
+    // ... (Keep Game State Variables section exactly the same as before) ...
     let board = [];
     let terrainMap = [];
     let playerSide = PLAYER_RED;
@@ -29,16 +33,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let gameRunning = false;
     let isPlayerTurn = false;
     let lastAiMove = null;
-    let currentPieceSet = PIECE_SET_LETTERS; // ** ADDED: Default to letters **
+    let currentPieceSet = PIECE_SET_LETTERS;
+
 
     // ==========================================================================
     // UI Element References
     // ==========================================================================
     let boardElement, statusElement, depthSelector, sideRedRadio, sideBlackRadio,
         themeToggleButton, startGameButton, sideSelectionFieldset,
-        togglePieceSetButton; // ** ADDED **
+        togglePieceSetButton;
 
     function cacheUIElements() {
+        console.log("Caching UI elements..."); // DEBUG
         boardElement = document.getElementById('gameBoard');
         statusElement = document.getElementById('gameStatus');
         depthSelector = document.getElementById('searchDepth');
@@ -47,14 +53,15 @@ document.addEventListener('DOMContentLoaded', () => {
         themeToggleButton = document.getElementById('toggleTheme');
         startGameButton = document.getElementById('startGame');
         sideSelectionFieldset = document.getElementById('sideSelection');
-        togglePieceSetButton = document.getElementById('togglePieceSet'); // ** ADDED **
+        togglePieceSetButton = document.getElementById('togglePieceSet');
 
         if (!boardElement || !statusElement || !depthSelector || !sideRedRadio ||
             !sideBlackRadio || !themeToggleButton || !startGameButton || !sideSelectionFieldset ||
-            !togglePieceSetButton) { // ** ADDED Check **
+            !togglePieceSetButton) {
             console.error("FATAL: Could not find all required UI elements! Check HTML IDs.");
             return false;
         }
+        console.log("UI elements cached successfully."); // DEBUG
         return true;
     }
 
@@ -79,15 +86,20 @@ document.addEventListener('DOMContentLoaded', () => {
         board[6][0] = { piece: 'R', color: PLAYER_BLACK }; board[6][2] = { piece: 'P', color: PLAYER_BLACK };
         board[6][4] = { piece: 'W', color: PLAYER_BLACK }; board[6][6] = { piece: 'E', color: PLAYER_BLACK };
     }
-    function initialUISetup() { /* ... ADDED listener for new button ... */
+    function initialUISetup() {
+        console.log("Running initialUISetup..."); // DEBUG
         if (!cacheUIElements()) return;
         renderBoard(true);
         statusElement.innerText = 'Select your side and press Start Game.';
+
+        console.log("Adding pre-game listeners..."); // DEBUG
         sideRedRadio.addEventListener('change', handleSideChange);
         sideBlackRadio.addEventListener('change', handleSideChange);
         themeToggleButton.addEventListener('click', handleThemeToggle);
         startGameButton.addEventListener('click', handleStartGame);
-        togglePieceSetButton.addEventListener('click', handleTogglePieceSet); // ** ADDED **
+        togglePieceSetButton.addEventListener('click', handleTogglePieceSet);
+        console.log("Pre-game listeners added."); // DEBUG
+
         sideSelectionFieldset.disabled = false;
         startGameButton.disabled = false;
         depthSelector.disabled = true;
@@ -97,7 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================================================
     // Rendering Logic
     // ==========================================================================
-    function renderBoard(initialClear = false) { /* ... MODIFIED piece rendering ... */
+    function renderBoard(initialClear = false) {
+        // console.log("--- Rendering Board ---"); // DEBUG (can be very verbose)
         if (!boardElement) return;
 
         for (let r = 0; r < BOARD_ROWS; r++) {
@@ -110,28 +123,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 1. Clear previous dynamic state
                 cellElement.innerText = '';
-                cellElement.classList.remove(
-                    'terrain-ground', 'terrain-water', 'terrain-trap', 'terrain-den',
-                    'piece-red', 'piece-black', 'selected',
-                    'last-move-from', 'last-move-to'
-                );
+                cellElement.classList.remove( 'terrain-ground', 'terrain-water', 'terrain-trap', 'terrain-den', 'piece-red', 'piece-black', 'selected', 'last-move-from', 'last-move-to');
 
                 // 2. Add terrain class
-                switch (terrain) {
+                switch (terrain) { /* ... unchanged ... */
                     case TERRAIN.WATER: cellElement.classList.add('terrain-water'); break;
                     case TERRAIN.RED_TRAP: case TERRAIN.BLACK_TRAP: cellElement.classList.add('terrain-trap'); break;
                     case TERRAIN.RED_DEN: case TERRAIN.BLACK_DEN: cellElement.classList.add('terrain-den'); break;
                     case TERRAIN.GROUND: default: cellElement.classList.add('terrain-ground'); break;
-                }
+                 }
 
                 // 3. Add piece if exists
                 if (!initialClear && cellData) {
-                    // ** MODIFIED: Display letter or number based on currentPieceSet **
+                    let pieceDisplay; // DEBUG
                     if (currentPieceSet === PIECE_SET_LETTERS) {
-                        cellElement.innerText = cellData.piece;
-                    } else { // PIECE_SET_NUMBERS
-                        cellElement.innerText = PIECES[cellData.piece]?.rank || '?'; // Show rank or '?' if unknown
+                        pieceDisplay = cellData.piece;
+                    } else {
+                        pieceDisplay = PIECES[cellData.piece]?.rank || '?';
                     }
+                    // console.log(`Cell ${r},${c}: Setting piece display to ${pieceDisplay}`); // DEBUG (verbose)
+                    cellElement.innerText = pieceDisplay;
                     cellElement.classList.add(`piece-${cellData.color}`);
                 }
 
@@ -142,19 +153,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 5. Highlight last AI move
                 if (lastAiMove) {
+                    // console.log(`Checking cell ${r},${c} against lastAiMove:`, lastAiMove); // DEBUG (verbose)
                     if (lastAiMove.from.row === r && lastAiMove.from.col === c) {
+                        // console.log(`   -> Adding last-move-from to ${r},${c}`); // DEBUG
                         cellElement.classList.add('last-move-from');
                     }
                     if (lastAiMove.to.row === r && lastAiMove.to.col === c) {
+                        // console.log(`   -> Adding last-move-to to ${r},${c}`); // DEBUG
                         cellElement.classList.add('last-move-to');
                     }
                 }
             }
         }
-
-        if (initialClear && statusElement) {
-            statusElement.innerText = 'Select your side and press Start Game.';
-        }
+        // console.log("--- Finished Rendering Board ---"); // DEBUG
+        if (initialClear && statusElement) { statusElement.innerText = 'Select your side and press Start Game.'; }
     }
 
     // ==========================================================================
@@ -170,14 +182,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================================================
     // Game Flow & Turn Management
     // ==========================================================================
-    function makeMove(from, to) { /* ... ADDED clearing lastAiMove on player turn ... */
+    function makeMove(from, to) {
+        // console.log(`makeMove called: from=(${from.row},${from.col}), to=(${to.row},${to.col}), isPlayerTurn=${isPlayerTurn}`); // DEBUG
         if (!gameRunning) return;
         const piece = board[from.row][from.col];
         if (!piece) { console.error("Attempted to move empty square:", from); return; }
 
-        // If this move is made by the player, clear the last AI move highlight record
         if (isPlayerTurn) {
+            console.log("Player move: Clearing lastAiMove"); // DEBUG
             lastAiMove = null;
+        } else {
+             console.log("AI move: Keeping lastAiMove which was set in makeAiMove"); // DEBUG
         }
 
         board[to.row][to.col] = piece;
@@ -195,6 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatus();
 
         if (!isPlayerTurn && gameRunning) {
+            console.log("Switching to AI turn, scheduling makeAiMove"); // DEBUG
             setTimeout(makeAiMove, AI_MOVE_DELAY_MS);
         }
     }
@@ -216,31 +232,57 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let r = 0; r < BOARD_ROWS; r++) { for (let c = 0; c < BOARD_COLS; c++) { const pieceInfo = board[r]?.[c]; if (pieceInfo) { const rank = PIECES[pieceInfo.piece]?.rank || 0; const terrain = getTerrain(r, c); if (pieceInfo.color === aiSide) { aiMaterial += rank; } else { playerMaterial += rank; } } const playerDen = (playerSide === PLAYER_RED) ? TERRAIN.RED_DEN : TERRAIN.BLACK_DEN; const aiDen = (aiSide === PLAYER_RED) ? TERRAIN.RED_DEN : TERRAIN.BLACK_DEN; if (getTerrain(r, c) === aiDen && board[r]?.[c]?.color === playerSide) playerWon = true; if (getTerrain(r, c) === playerDen && board[r]?.[c]?.color === aiSide) aiWon = true; } }
         if (aiWon) return WIN_SCORE; if (playerWon) return LOSS_SCORE; return aiMaterial - playerMaterial;
     }
-    function makeAiMove() { /* ... ADDED storing lastAiMove ... */
-        if (!gameRunning || isPlayerTurn) return;
+    function makeAiMove() {
+        console.log("--- AI Turn Start ---"); // DEBUG
+        if (!gameRunning || isPlayerTurn) { console.log("makeAiMove called but not AI turn or game not running"); return; } // DEBUG
+
         statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`;
         console.time("AI Move Calculation (1-Ply)");
+
         const legalMoves = generateLegalMoves(aiSide);
-        if (legalMoves.length === 0) { console.timeEnd("AI Move Calculation (1-Ply)"); endGame(playerSide, "no_moves"); return; }
-        let bestScore = LOSS_SCORE - 1; let bestMove = null; let possibleBestMoves = [];
+        console.log(`AI found ${legalMoves.length} legal moves.`); // DEBUG
+
+        if (legalMoves.length === 0) {
+            console.timeEnd("AI Move Calculation (1-Ply)");
+            endGame(playerSide, "no_moves");
+            return;
+        }
+
+        let bestScore = LOSS_SCORE - 1;
+        let bestMove = null;
+        let possibleBestMoves = [];
+
         for (const move of legalMoves) {
             const pieceFrom = board[move.from.row][move.from.col]; const pieceTo = board[move.to.row][move.to.col];
             board[move.to.row][move.to.col] = pieceFrom; board[move.from.row][move.from.col] = null;
             const score = evaluateBoard();
             board[move.from.row][move.from.col] = pieceFrom; board[move.to.row][move.to.col] = pieceTo;
+            // console.log(`   Move (${move.from.row},${move.from.col})->(${move.to.row},${move.to.col}) evaluated score: ${score}`); // DEBUG (verbose)
             if (score > bestScore) { bestScore = score; possibleBestMoves = [move]; } else if (score === bestScore) { possibleBestMoves.push(move); }
         }
-        console.timeEnd("AI Move Calculation (1-Ply)");
-        if (possibleBestMoves.length > 0) { const randomIndex = Math.floor(Math.random() * possibleBestMoves.length); bestMove = possibleBestMoves[randomIndex]; }
-        else { console.error("AI Error: No best move found?"); bestMove = legalMoves[0]; }
 
-        // ** Store the chosen move for highlighting **
+        console.timeEnd("AI Move Calculation (1-Ply)");
+
+        if (possibleBestMoves.length > 0) {
+            const randomIndex = Math.floor(Math.random() * possibleBestMoves.length);
+            bestMove = possibleBestMoves[randomIndex];
+            console.log(`AI selecting from ${possibleBestMoves.length} best moves with score ${bestScore}. Chosen index: ${randomIndex}`); // DEBUG
+        } else {
+             console.error("AI Error: No best move found?"); bestMove = legalMoves[0];
+        }
+
+        // Store the chosen move for highlighting BEFORE calling makeMove
         lastAiMove = { from: bestMove.from, to: bestMove.to };
+        console.log("Setting lastAiMove to:", lastAiMove); // DEBUG
 
         const movingPiece = board[bestMove.from.row]?.[bestMove.from.col];
-        console.log(`AI (${aiSide}) chose move ${movingPiece?.piece} from (${bestMove.from.row},${bestMove.from.col}) to (${bestMove.to.row},${bestMove.to.col}) with score ${bestScore}`);
+        console.log(`AI (${aiSide}) final choice: ${movingPiece?.piece} from (${bestMove.from.row},${bestMove.from.col}) to (${bestMove.to.row},${bestMove.to.col})`);
+
+        // Execute the best move
         makeMove(bestMove.from, bestMove.to);
+        console.log("--- AI Turn End ---"); // DEBUG
     }
+
 
     // ==========================================================================
     // UI Interaction & Event Handlers
@@ -251,14 +293,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleSideChange() { /* ... no changes ... */
         if (gameRunning) return; console.log("Side selection changed (will apply on Start).");
     }
-    function handleThemeToggle() { /* ... no changes ... */
-        document.body.classList.toggle('dark-mode'); console.log("Theme toggled.");
+    function handleThemeToggle() { /* ... ADDED log ... */
+        console.log("handleThemeToggle CLICKED!"); // DEBUG
+        document.body.classList.toggle('dark-mode');
+        console.log("Theme toggled.");
     }
-    function handleStartGame() { /* ... ADDED resetting lastAiMove ... */
+    function handleStartGame() { /* ... ADDED log ... */
+        console.log("handleStartGame CLICKED!"); // DEBUG
         if (gameRunning) return; console.log("Starting new game...");
         playerSide = sideRedRadio.checked ? PLAYER_RED : PLAYER_BLACK; aiSide = (playerSide === PLAYER_RED) ? PLAYER_BLACK : PLAYER_RED; console.log(`Player: ${playerSide}, AI: ${aiSide}. Red moves first.`);
         setupInitialBoard(); currentPlayer = PLAYER_RED; isPlayerTurn = (currentPlayer === playerSide); selectedCell = null; gameRunning = true;
-        lastAiMove = null; // ** Reset last move highlight on new game **
+        lastAiMove = null;
         sideSelectionFieldset.disabled = true; startGameButton.disabled = true; depthSelector.disabled = true; depthSelector.style.opacity = 0.5;
         boardElement.removeEventListener('click', handleCellClick); boardElement.addEventListener('click', handleCellClick);
         renderBoard(); updateStatus();
@@ -267,15 +312,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateStatus() { /* ... no changes ... */
         if (!statusElement) return; if (!gameRunning) { return; } if (isPlayerTurn) { if (selectedCell) { const piece = board[selectedCell.row]?.[selectedCell.col]; statusElement.innerText = `${playerSide.toUpperCase()}'s turn. Select destination for ${piece?.piece}.`; } else { statusElement.innerText = `${playerSide.toUpperCase()}'s turn. Select a piece.`; } } else { statusElement.innerText = `AI (${aiSide.toUpperCase()}) is thinking...`; }
     }
-
-    // ** ADDED: Handler for the new piece set toggle button **
-    function handleTogglePieceSet() {
+    function handleTogglePieceSet() { // ** ADDED log **
+        console.log("handleTogglePieceSet CLICKED!"); // DEBUG
         if (currentPieceSet === PIECE_SET_LETTERS) {
             currentPieceSet = PIECE_SET_NUMBERS;
         } else {
             currentPieceSet = PIECE_SET_LETTERS;
         }
-        console.log("Piece set toggled to:", currentPieceSet);
+        console.log("Piece set toggled to:", currentPieceSet); // DEBUG
         renderBoard(); // Re-render the board to show the new piece set
     }
 
@@ -284,5 +328,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================================================
     initializeTerrainMap();
     initialUISetup(); // Sets up UI elements and pre-game listeners
+    console.log("Script initialization complete."); // DEBUG
 
 }); // End DOMContentLoaded
