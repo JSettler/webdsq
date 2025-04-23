@@ -45,7 +45,6 @@ td.terrain-ground { background-color: #8B4513; } /* Explicit ground (SaddleBrown
 .piece-black { color: black; }
 
 /* Ensure den text color overrides piece color if piece is inside the TD */
-/* This might need adjustment if pieces become separate elements later */
 td.terrain-den.piece-red,
 td.terrain-den.piece-black {
     color: white;
@@ -170,26 +169,38 @@ body.dark-mode input[type="radio"]:checked + label {
 
 /* Highlight for selected piece */
 .selected {
-    outline: 3px solid yellow;
+    outline: 3px solid yellow !important; /* Use !important to ensure it overrides background */
     outline-offset: -3px; /* Inset outline slightly */
 }
 
-/* Highlight for last AI move */
+/* Highlight for last AI move (using green) */
 td.last-move-from {
-    background-color: #b0e0e6cc; /* Powder blue with some transparency */
-    /* Using background blend mode might be smoother if needed */
+    background-color: #90ee90 !important; /* LightGreen - Use !important to fight specificity */
 }
 td.last-move-to {
-    background-color: #add8e6cc; /* Light blue with some transparency */
+    background-color: #32cd32 !important; /* LimeGreen - Use !important */
 }
 
-/* Dark mode adjustments for last move */
+/* Dark mode adjustments for last move (using different greens) */
 body.dark-mode td.last-move-from {
-    background-color: #3a5f7acc; /* Darker blue/grey with transparency */
+    background-color: #2e8b57 !important; /* SeaGreen */
 }
 body.dark-mode td.last-move-to {
-    background-color: #4682b4cc; /* Steel blue with transparency */
-    /* Alternative: Use outline for dark mode if background clashes */
-    /* outline: 2px solid cyan;
-       outline-offset: -2px; */
+    background-color: #66cdaa !important; /* MediumAquaMarine */
+}
+
+/* Ensure piece colors are visible on green backgrounds */
+/* Day mode */
+td.last-move-from .piece-black,
+td.last-move-to .piece-black {
+    color: #111; /* Force dark color for black pieces on light green */
+}
+/* Dark mode */
+body.dark-mode td.last-move-from .piece-red,
+body.dark-mode td.last-move-to .piece-red {
+    color: #ffcccb; /* Force light color for red pieces on dark green */
+}
+body.dark-mode td.last-move-from .piece-black,
+body.dark-mode td.last-move-to .piece-black {
+    color: #111; /* Force dark color for black pieces on dark green */
 }
